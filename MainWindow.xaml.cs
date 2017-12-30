@@ -37,8 +37,11 @@ namespace ReKi2 {
         private string _pathDepth = null;
         private string _subjectID = null;
         private bool _recording = false;
-        private bool _processing = false;       
-        
+        private bool _processing = false;
+        private double last_time = 0;
+        private double fps = 0;
+
+
         public MainWindow( ) {                       
             this._sensor = KinectSensor.GetDefault();
             this._sensor.IsAvailableChanged += this.Sensor_Status;            
@@ -88,6 +91,24 @@ namespace ReKi2 {
             Task.Run(( ) => processDepth(e, _recording, _firstFrameTime, _depthMM, _pathDepth));
         }
 
+        public string GetEpochTime()
+        {
+            DateTime dtCurTime = DateTime.Now;
+            DateTime dtEpochStartTime = Convert.ToDateTime("1/1/1970 8:00:00 AM");
+            TimeSpan ts = dtCurTime.Subtract(dtEpochStartTime);
+            double epochtime = ((double)ts.TotalMilliseconds) / 1000;
+            return epochtime.ToString("0.00000", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        public double GetEpochTimeDouble()
+        {
+            DateTime dtCurTime = DateTime.Now;
+            DateTime dtEpochStartTime = Convert.ToDateTime("1/1/1970 8:00:00 AM");
+            TimeSpan ts = dtCurTime.Subtract(dtEpochStartTime);
+            double epochtime = ((double)ts.TotalMilliseconds) / 1000;
+            return epochtime;
+        }
+
         private async void processColor(ColorFrameArrivedEventArgs e, bool _recording, TimeSpan? _firstFrameTime, string _pathColor) {
             await Task.Run(( ) => {
                 int width = 1920; int height = 1080;
@@ -108,18 +129,33 @@ namespace ReKi2 {
                     }
                     TimeSpan? _frameSpan = DateTime.Now.TimeOfDay - this._firstFrameTime;
 
+                    fps = (int)(1.0 / (GetEpochTimeDouble() - last_time));
+                    last_time = GetEpochTimeDouble();
+
                     App.Current.Dispatcher.Invoke(new Action(( ) => {
                         this.cameraColor.Source = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null, pixels, stride);
-                        this.txtb_colorTime.Text = "Color frame: " + _frameTime;
-                        if (this._recording) {
-                            this.txtb_stopwatch.Text = string.Format("{0:hh\\:mm\\:ss}", _frameSpan);                            
+                        //this.txtb_colorTime.Text = "Color frame: " + _frameTime;
+                        this.txtb_colorTime.Text = "Color frame: " + GetEpochTime();
+                    
+                    if (this._recording) {
+                            this.txtb_stopwatch.Text = string.Format("{0:hh\\:mm\\:ss}", _frameSpan);
+                            this.txtb_fps.Text = fps.ToString() + "fps";
                         }
                     }));
+
                     if (this._recording) {                        
                         //BitmapEncoder encoder = new PngBitmapEncoder(); // 2000kt and slower
-                        BitmapEncoder encoder = new JpegBitmapEncoder();  // 300kt     
+                        BitmapEncoder encoder = new PngBitmapEncoder();  // 300kt     
                         encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null, pixels, stride)));
-                        string pathOut = System.IO.Path.Combine(this._pathColor + "\\K2V-color-" + _frameTime.Replace(',', '-') + ".jpg");
+
+                        Int32 unixTimestamp = (Int32)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+
+                        
+                        //string pathOut = System.IO.Path.Combine(this._pathColor + "\\K2V-color-" + _frameTime.Replace(',', '-') + ".jpg");
+                        string pathOut = System.IO.Path.Combine(this._pathColor + "\\" + GetEpochTime() + ".png");
+
+
+
                         try {
                             using (FileStream fs = new FileStream(pathOut, FileMode.Create)) {
                                 encoder.Save(fs);
@@ -177,12 +213,13 @@ namespace ReKi2 {
                     }
                     App.Current.Dispatcher.Invoke(new Action(( ) => {
                         this.cameraDepth.Source = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null, pixelData, stride);
-                        this.txtb_depthTime.Text = "Depth frame: " + _frameTime;                        
+                        this.txtb_depthTime.Text = "Depth frame: " + GetEpochTime();                        
                     }));
                     if (this._recording) {                        
                         BitmapEncoder encoder = new PngBitmapEncoder();
                         encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(width, height, 96, 96, PixelFormats.Gray16, null, depthData, stride16)));
-                        string pathOut = System.IO.Path.Combine(this._pathDepth + "\\K2V-depth-" + _frameTime.Replace(',', '-') + ".png");                        
+                        //string pathOut = System.IO.Path.Combine(this._pathDepth + "\\K2V-depth-" + _frameTime.Replace(',', '-') + ".png");                        
+                        string pathOut = System.IO.Path.Combine(this._pathDepth + "\\" + GetEpochTime() + ".png");
                         try {
                             using (FileStream fs = new FileStream(pathOut, FileMode.Create)) {
                                 encoder.Save(fs);
